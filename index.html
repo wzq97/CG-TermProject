@@ -4,6 +4,7 @@
 		<script src="js/three.js"></script>
 		<script src="js/three.min.js"></script>
 		<script src="js/FirstPersonControls.js"></script>
+		<script src="js/OrbitControls.js"></script>
 		<script src="js/FBXLoader.js"></script>
 		<script src="js/inflate.min.js"></script>
 	</head>
@@ -25,6 +26,10 @@
 			var buildings = [];
 			var houses = [];
 			var street;
+			var street_v;
+			var acs = [];
+			var lights = [];
+			var blackboard;
 			var rotation = [0, -Math.PI/2, -Math.PI, -3*Math.PI/2];
 
 			//======================================
@@ -32,28 +37,29 @@
 			var mapHeight = 12;
 			var buildingFootprint = 37;
 			var mapGrid = [];
-			var streetNum = 5;
+			var streetNum = 3;
 			//======================================
 
 			function init() {
 
-				// Create a camera
-				// 	Set a Field of View (FOV) of 75 degrees
-				// 	Set an Apsect Ratio of the inner width divided by the inner height of the window
-				//	Set the 'Near' distance at which the camera will start rendering scene objects to 2
-				//	Set the 'Far' (draw distance) at which objects will not be rendered to 1000
 				//camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 1000 );
-				camera = new THREE.OrthographicCamera( window.innerWidth/-8, window.innerWidth / 8, window.innerHeight / 8, window.innerHeight / - 8, -1000, 1000 );
-				camera.position.X = 20;
-				camera.position.y = 15;
-				
+				// camera = new THREE.OrthographicCamera( window.innerWidth/-8, window.innerWidth / 8, window.innerHeight / 8, window.innerHeight / - 8, -1000, 1000 );
+				// camera.position.X = 20;
+				// camera.position.y = 15;
+				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 1500 );
+				camera.position.X = 200;
+				camera.position.y = 400;
+    			camera.position.z = 200;
+				//camera.position.set( 500, 600, 500 );
+				//camera.lookAt (buildingFootprint*mapWidth*100/2,0,buildingFootprint*mapWidth/2);
+
 				// 
 				loadingManager = new THREE.LoadingManager();
 
 				// SCENE
 				scene = new THREE.Scene();
-				scene.background = new THREE.Color( 0xa0a0a0 );
-				scene.fog = new THREE.Fog( 0xa0a0a0, 400, 1000 );
+				scene.background = new THREE.Color( 0x000000 );
+				scene.fog = new THREE.Fog( 0x000000, 600, 1300 );
 
 				// Create a HemisphereLight source
 				// light = new THREE.HemisphereLight( 0xffffff, 0x444444 );
@@ -68,13 +74,36 @@
 				//light2.shadow.mapSize.width = 2048 * 2;
 				//light2.shadow.mapSize.height = 2048 * 2;
 				scene.add( light2 );
+				
+				var light = new THREE.AmbientLight( 0x222222 );
+				scene.add( light );
+
+				// Create a WebGL Renderer
+				renderer = new THREE.WebGLRenderer({ antialias: true });
+				renderer.setPixelRatio(window.devicePixelRatio * 1);
+				//renderer.shadowMap.enabled = true;
+				renderer.shadowMap.type = THREE.PCFShadowMap;
+				// Set the size of the renderer to the inner width and inner height of the window
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				// Add in the created DOM element to the body of the document
+				document.body.appendChild( renderer.domElement );
 
 				// const cameraHelper = new THREE.CameraHelper(light2.shadow.camera);
 				// scene.add(cameraHelper);
 
 				// Create First Person Controls
-				controls = new THREE.FirstPersonControls( camera );
-				scene.add( controls.getObject() );
+				//controls = new THREE.FirstPersonControls( camera );
+				//scene.add( controls.getObject() );
+				
+				// orbit control
+				controls = new THREE.OrbitControls( camera, renderer.domElement );
+				controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+				controls.dampingFactor = 0.05;
+				controls.screenSpacePanning = false;
+				controls.minDistance = 200;
+				controls.maxDistance = 800;
+				controls.maxPolarAngle = Math.PI / 2;
+				controls.target.set( buildingFootprint*mapWidth/2, 20, buildingFootprint*mapWidth/2 );
 
 				// Create FLOOR
 				// var mesh = new THREE.Mesh( new THREE.PlaneBufferGeometry( 2000, 2000 ), new THREE.MeshPhongMaterial( { color: 0x999999, depthWrite: false } ) );
@@ -100,15 +129,7 @@
 				// PUT models into the scene
 				//generateAlley();
 				
-				// Create a WebGL Renderer
-				renderer = new THREE.WebGLRenderer({ antialias: true });
-				renderer.setPixelRatio(window.devicePixelRatio * 1);
-				//renderer.shadowMap.enabled = true;
-				renderer.shadowMap.type = THREE.PCFShadowMap;
-				// Set the size of the renderer to the inner width and inner height of the window
-				renderer.setSize( window.innerWidth, window.innerHeight );
-				// Add in the created DOM element to the body of the document
-				document.body.appendChild( renderer.domElement );
+				
 
 			}
 
@@ -117,9 +138,9 @@
 				// Call the requestAnimationFrame function on the animate function
 				requestAnimationFrame( animate );
 				//console.log(buildings.length);
-
+				controls.update();
 				// Check the FirstPersonControls object and update velocity accordingly
-				playerControls();
+				//playerControls();
 
 				//controls.getObject().translateX(0.1 );
 
@@ -137,16 +158,16 @@
 				}, undefined, function ( e ) {
 					console.error( e );
 				} );
-				// loader.load( 'models/shop2.fbx', function ( object ) {
-				// 	buildings.push(object);
-				// }, undefined, function ( e ) {
-				// 	console.error( e );
-				// } );
-				// loader.load( 'models/shop3.fbx', function ( object ) {
-				// 	buildings.push(object);
-				// }, undefined, function ( e ) {
-				// 	console.error( e );
-				// } );
+				loader.load( 'models/shop2.fbx', function ( object ) {
+					buildings.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+				loader.load( 'models/shop3.fbx', function ( object ) {
+					buildings.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
 				// loader.load( 'models/shop4.fbx', function ( object ) {
 				// 	buildings.push(object);
 				// }, undefined, function ( e ) {
@@ -162,17 +183,49 @@
 				}, undefined, function ( e ) {
 					console.error( e );
 				} );
-				loader.load( 'models/ac.fbx', function ( object ) {
-					//houses.push(object);
-					object.castShadow = true;
-					object.receiveShadow = true;
-					object.translateX(100);
-					object.translateZ(100);
-
-						//scene.add( object );
+				loader.load( 'models/house2.fbx', function ( object ) {
+					houses.push(object);
 				}, undefined, function ( e ) {
 					console.error( e );
 				} );
+
+				loader.load( 'models/ac.fbx', function ( object ) {
+					acs.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+				loader.load( 'models/ac1.fbx', function ( object ) {
+					acs.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+				loader.load( 'models/ac2.fbx', function ( object ) {
+					acs.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+
+				loader.load( 'models/light1.fbx', function ( object ) {
+					lights.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+				loader.load( 'models/light2.fbx', function ( object ) {
+					lights.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+				loader.load( 'models/light3.fbx', function ( object ) {
+					lights.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+				loader.load( 'models/light4.fbx', function ( object ) {
+					lights.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+
 				loader.load( 'models/ground.fbx', function ( object ) {
 					object.castShadow = true;
 					object.receiveShadow = true;
@@ -184,6 +237,18 @@
 					street = object;
 					object.castShadow = true;
 					object.receiveShadow = true;
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+				loader.load( 'models/street_v.fbx', function ( object ) {
+					street_v = object;
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+
+
+				loader.load( 'models/blackboard.fbx', function ( object ) {
+					blackboard = object;
 				}, undefined, function ( e ) {
 					console.error( e );
 				} );
@@ -228,8 +293,8 @@
 
 			// generate a map
 			function generateAlley() {
-				var b,h,s,rot;
-
+				var b,h,s,sv,sh,a,l,rot;
+				var board;
 				for(var i = 0; i < mapWidth; i++){
 					for(var j = 0; j < mapHeight; j++){
 						var result = mapGrid[i][j];
@@ -243,13 +308,23 @@
 							s.translateZ(pos[1]);
 							scene.add( s );
 						}
-						if(result < -1 ){
-							s = street.clone();
-							s.castShadow = true;
-							s.receiveShadow = true;
-							s.translateX(pos[0]);
-							s.translateZ(pos[1]);
-							scene.add( s );
+						else if(result < -1 ){
+							sv = street_v.clone();
+							sv.castShadow = true;
+							sv.receiveShadow = true;
+							sv.translateX(pos[0]);
+							sv.translateZ(pos[1]);
+							scene.add( sv );
+
+							var r0 = randInt(0,3);
+							if(r0 == 0){
+								board = blackboard.clone();
+								board.castShadow = true;
+								board.receiveShadow = true;
+								board.translateX(pos[0]);
+								board.translateZ(pos[1]);
+								scene.add( board );	
+							}			
 						}
 						else if( result < 0 ){
 							s = street.clone();
@@ -290,6 +365,32 @@
 								h.translateZ(pos[1]);
 								h.rotation.y = rot;
 								scene.add( h );
+
+								// add ac
+								var r0 = randInt(0,1);
+								if(r0 == 0){
+									var r3 = randInt(0,acs.length-1);
+									a = acs[r3].clone();
+									a.castShadow = true;
+									a.receiveShadow = true;
+									a.translateX(pos[0]);
+									a.translateZ(pos[1]);
+									a.translateY(randInt(-2,10));
+									a.rotation.y = rot;
+									scene.add( a );
+								}
+								r0 = randInt(0,1);
+								if(r0 == 0){
+									var r4 = randInt(0,lights.length-1);
+									l = lights[r4].clone();
+									l.castShadow = true;
+									l.receiveShadow = true;
+									l.translateX(pos[0]);
+									l.translateZ(pos[1]);
+									l.translateY(randInt(-5,5));
+									l.rotation.y = rot;
+									scene.add( l );
+								}
 							}
 							else{
 								continue;
@@ -300,11 +401,7 @@
 					}
 				}
 			}
-			// return true can place a house
-			// return false
-			// [r][c] 1 1
-			// 1 [r][c] 1
-			// 1 1 1
+			// return true can place a house(8 grid around is all house then false)
 			function checkneighbor(row,col){
 				if(row < 1 || col < 1 || row > mapWidth-2 || col > mapHeight-2){
 					return true;
@@ -336,35 +433,28 @@
 				return false;
 			}
 			function checkOrientation(row,col){
-				if(row < 1 || col < 1 || row > mapWidth-2 || col > mapHeight-2){
+				if(col < 1){
+					return 2;
+				}
+				else if(col > mapHeight-2){
 					return 0;
+				}
+				else if(row < 1){
+					return 1;
+				}
+				else if(row > mapWidth-2){
+					return 3;
 				}
 				if(mapGrid[row-1][col-1] < 0 && mapGrid[row-1][col] < 0 && mapGrid[row-1][col+1] < 0){
 					return 1;
 				}
+				else if(mapGrid[row][col-1] < 0 && mapGrid[row-1][col-1] < 0 && mapGrid[row+1][col-1] < 0){
+					return 2;
+				}
+				else if(mapGrid[row+1][col-1] < 0 && mapGrid[row+1][col] < 0 && mapGrid[row+1][col+1] < 0){
+					return 3;
+				}
 				return 0;
-				// else if(mapGrid[row-1][col] < 0){
-				// 	return true;
-				// }
-				// else if(mapGrid[row-1][col+1] < 0){
-				// 	return true;
-				// }
-				// else if(mapGrid[row][col-1] < 0){
-				// 	return true;
-				// }
-				// else if(mapGrid[row][col+1] < 0){
-				// 	return true;
-				// }
-				// else if(mapGrid[row+1][col-1] < 0){
-				// 	return true;
-				// }
-				// else if(mapGrid[row+1][col] < 0){
-				// 	return true;
-				// }
-				// else if(mapGrid[row+1][col+1] < 0){
-				// 	return true;
-				// }
-				// return false;
 			}
 
 			function playerControls () {
