@@ -33,8 +33,8 @@
 			var rotation = [0, -Math.PI/2, -Math.PI, -3*Math.PI/2];
 
 			//======================================
-			var mapWidth = 12;
-			var mapHeight = 12;
+			var mapWidth = 15;
+			var mapHeight = 15;
 			var buildingFootprint = 37;
 			var mapGrid = [];
 			var streetNum = 3;
@@ -66,14 +66,13 @@
 				// light.position.set( 0, 400, 400 );
 				// scene.add( light );
 
-				light2 = new THREE.DirectionalLight( 0xffffff, 1.0 );
-				//light2.position.set( 0, 500, 100 );
-				light2.castShadow = true;
+				// light2 = new THREE.DirectionalLight( 0xffffff, 1.0 );
+				// light2.castShadow = true;
 				//light2.shadow = new THREE.LightShadow(camera);
 				//light2.shadow.bias = 0.0001;
 				//light2.shadow.mapSize.width = 2048 * 2;
 				//light2.shadow.mapSize.height = 2048 * 2;
-				scene.add( light2 );
+				//scene.add( light2 );
 				
 				var light = new THREE.AmbientLight( 0x222222 );
 				scene.add( light );
@@ -99,9 +98,9 @@
 				controls = new THREE.OrbitControls( camera, renderer.domElement );
 				controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
 				controls.dampingFactor = 0.05;
-				controls.screenSpacePanning = false;
+				controls.screenSpacePanning = true;
 				controls.minDistance = 200;
-				controls.maxDistance = 800;
+				controls.maxDistance = 700;
 				controls.maxPolarAngle = Math.PI / 2;
 				controls.target.set( buildingFootprint*mapWidth/2, 20, buildingFootprint*mapWidth/2 );
 
@@ -226,13 +225,13 @@
 					console.error( e );
 				} );
 
-				loader.load( 'models/ground.fbx', function ( object ) {
-					object.castShadow = true;
-					object.receiveShadow = true;
-					scene.add( object );
-				}, undefined, function ( e ) {
-					console.error( e );
-				} );
+				// loader.load( 'models/ground.fbx', function ( object ) {
+				// 	object.castShadow = true;
+				// 	object.receiveShadow = true;
+				// 	scene.add( object );
+				// }, undefined, function ( e ) {
+				// 	console.error( e );
+				// } );
 				loader.load( 'models/street.fbx', function ( object ) {
 					street = object;
 					object.castShadow = true;
