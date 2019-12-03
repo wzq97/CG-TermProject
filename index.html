@@ -6,7 +6,15 @@
 		<script src="js/FirstPersonControls.js"></script>
 		<script src="js/OrbitControls.js"></script>
 		<script src="js/FBXLoader.js"></script>
+		<script src="js/OBJLoader.js"></script>
 		<script src="js/inflate.min.js"></script>
+		<script src="js/EffectComposer.js"></script>
+		<script src="js/SSAOPass.js"></script>
+		<script src="js/SSAOShader.js"></script>
+		<script src="js/ShaderPass.js"></script>
+		<script src="js/CopyShader.js"></script>
+		<script src="js/SimplexNoise.js"></script>
+		<script src="js/dat.gui.min.js"></script>
 	</head>
 	<body>
 		<script>
@@ -17,6 +25,9 @@
 			var boxGeometry, boxMaterial, boxMesh, boxTexture;
 			var controls;
 			var light;
+			var composer;
+			var group;
+			var material;
 
 			var loadingManager;
 
@@ -29,70 +40,46 @@
 			var street_v;
 			var acs = [];
 			var lights = [];
+			var insides = [];
 			var blackboard;
+			var roofs = [];
 			var rotation = [0, -Math.PI/2, -Math.PI, -3*Math.PI/2];
 
 			//======================================
-			var mapWidth = 15;
-			var mapHeight = 15;
-			var buildingFootprint = 37;
+			var mapWidth = 5;
+			var mapHeight = 5;
+			var buildingFootprint = 38;
 			var mapGrid = [];
-			var streetNum = 3;
+			var streetNum = 2;
 			//======================================
 
 			function init() {
 
-				//camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 1000 );
-				// camera = new THREE.OrthographicCamera( window.innerWidth/-8, window.innerWidth / 8, window.innerHeight / 8, window.innerHeight / - 8, -1000, 1000 );
-				// camera.position.X = 20;
-				// camera.position.y = 15;
 				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 1500 );
-				camera.position.X = 200;
-				camera.position.y = 400;
-    			camera.position.z = 200;
-				//camera.position.set( 500, 600, 500 );
-				//camera.lookAt (buildingFootprint*mapWidth*100/2,0,buildingFootprint*mapWidth/2);
+				camera.position.X = 400;
+				camera.position.y = 300;
+    			camera.position.z = 400;
 
-				// 
 				loadingManager = new THREE.LoadingManager();
 
 				// SCENE
 				scene = new THREE.Scene();
-				scene.background = new THREE.Color( 0x000000 );
-				scene.fog = new THREE.Fog( 0x000000, 600, 1300 );
+				scene.background = new THREE.Color( 0xdddddd  );
+				scene.fog = new THREE.Fog( 0xffffff , 600, 1300 );
 
 				// Create a HemisphereLight source
-				// light = new THREE.HemisphereLight( 0xffffff, 0x444444 );
-				// light.position.set( 0, 400, 400 );
+				// light = new THREE.HemisphereLight();
+				// light.castShadow = true;
 				// scene.add( light );
-
-				// light2 = new THREE.DirectionalLight( 0xffffff, 1.0 );
-				// light2.castShadow = true;
-				//light2.shadow = new THREE.LightShadow(camera);
-				//light2.shadow.bias = 0.0001;
-				//light2.shadow.mapSize.width = 2048 * 2;
-				//light2.shadow.mapSize.height = 2048 * 2;
-				//scene.add( light2 );
-				
-				var light = new THREE.AmbientLight( 0x222222 );
-				scene.add( light );
-
 				// Create a WebGL Renderer
 				renderer = new THREE.WebGLRenderer({ antialias: true });
 				renderer.setPixelRatio(window.devicePixelRatio * 1);
 				//renderer.shadowMap.enabled = true;
-				renderer.shadowMap.type = THREE.PCFShadowMap;
+				renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 				// Set the size of the renderer to the inner width and inner height of the window
 				renderer.setSize( window.innerWidth, window.innerHeight );
 				// Add in the created DOM element to the body of the document
 				document.body.appendChild( renderer.domElement );
-
-				// const cameraHelper = new THREE.CameraHelper(light2.shadow.camera);
-				// scene.add(cameraHelper);
-
-				// Create First Person Controls
-				//controls = new THREE.FirstPersonControls( camera );
-				//scene.add( controls.getObject() );
 				
 				// orbit control
 				controls = new THREE.OrbitControls( camera, renderer.domElement );
@@ -102,50 +89,90 @@
 				controls.minDistance = 200;
 				controls.maxDistance = 700;
 				controls.maxPolarAngle = Math.PI / 2;
-				controls.target.set( buildingFootprint*mapWidth/2, 20, buildingFootprint*mapWidth/2 );
+				repositionCam();
+				
+				// COMPOSER
+				composer = new THREE.EffectComposer( renderer );
+				var ssaoPass = new THREE.SSAOPass( scene, camera, window.innerWidth, window.innerHeight );
+				ssaoPass.kernelRadius = 32;
+				ssaoPass.minDistance = 0.01;
+				ssaoPass.maxDistance = 0.2;
+				composer.addPass( ssaoPass );
 
-				// Create FLOOR
-				// var mesh = new THREE.Mesh( new THREE.PlaneBufferGeometry( 2000, 2000 ), new THREE.MeshPhongMaterial( { color: 0x999999, depthWrite: false } ) );
-				// mesh.rotation.x = - Math.PI / 2;
-				// mesh.receiveShadow = true;
-				// scene.add( mesh );
-				
-				// GRID
-				// var grid = new THREE.GridHelper( 2000, 20, 0x000000, 0x000000 );
-				// grid.material.opacity = 0.2;
-				// grid.material.transparent = true;
-				// grid.receiveShadow = true;
-				// scene.add( grid );
-				
+				var material = new THREE.MeshBasicMaterial();
 				// LOAD models
 				loadModels();
 
 				loadingManager.onLoad = function ( ) {
 					console.log( 'Loading complete!');
 					buildGrid();
+					addSceneLight();
 					generateAlley();
 				};
-				// PUT models into the scene
-				//generateAlley();
-				
-				
 
+				//GUI
+				var gui = new dat.GUI();
+				var mapSize = { size: 5 };
+				var streetNumber = { street: 2 };
+				gui.add(mapSize, 'size').min( 1 ).max( 20 ).step(1).onChange(function(){
+					// refresh based on the new value of params.interation
+					mapWidth = mapSize.size;
+					mapHeight = mapSize.size;
+					console.log(mapSize.size);
+				});
+				gui.add(streetNumber, 'street').min( 0 ).max( mapWidth ).step(1).onChange(function(){
+					streetNum = streetNumber.street;
+				});
+				var gen = {
+					add: function() {
+						clear();
+						buildGrid();
+						repositionCam();
+						addSceneLight();
+						generateAlley();
+					}
+				};
+				gui.add(gen, "add").name("Generate!");
+				window.addEventListener( 'resize', onWindowResize, false );
+			}
+
+			function repositionCam(){
+				controls.target.set( buildingFootprint*(mapWidth-1)/2, 20, buildingFootprint*(mapWidth-1)/2 );
 			}
 
 			function animate() {
-
-				// Call the requestAnimationFrame function on the animate function
 				requestAnimationFrame( animate );
-				//console.log(buildings.length);
+
 				controls.update();
-				// Check the FirstPersonControls object and update velocity accordingly
-				//playerControls();
 
-				//controls.getObject().translateX(0.1 );
-
-				// Render everything using the created renderer, scene, and camera
 				renderer.render( scene, camera );
+			}
 
+			//LET THERE BE LIGHT
+			function addSceneLight(){
+				light2 = new THREE.DirectionalLight( 0xaaaaaa, 1 );
+				light2.position.set(500, 1500, 1000);
+				light2.castShadow = true;
+				light2.shadowDarkness = 2;
+				scene.add( light2 );
+
+				light2 = new THREE.DirectionalLight( 0xaaaaaa, 1 );
+				light2.position.set(-500, 1500, -1000);
+				light2.castShadow = true;
+				light2.shadowDarkness = 2;
+				scene.add( light2 );
+
+				var light = new THREE.AmbientLight( 0xffffff,0.5);
+				light.castShadow = true;
+				light.shadowDarkness = 2;
+				scene.add( light );
+			}
+
+			function clear(){
+				mapGrid = [];
+				while(scene.children.length > 0){ 
+					scene.remove(scene.children[0]); 
+				}
 			}
 
 			// load my models for alley
@@ -167,23 +194,36 @@
 				}, undefined, function ( e ) {
 					console.error( e );
 				} );
-				// loader.load( 'models/shop4.fbx', function ( object ) {
-				// 	buildings.push(object);
-				// }, undefined, function ( e ) {
-				// 	console.error( e );
-				// } );
-				// loader.load( 'models/shop5.fbx', function ( object ) {
-				// 	buildings.push(object);
-				// }, undefined, function ( e ) {
-				// 	console.error( e );
-				// } );
+
 				loader.load( 'models/house1.fbx', function ( object ) {
 					houses.push(object);
+					//houses.push(new THREE.Mesh(object));
 				}, undefined, function ( e ) {
 					console.error( e );
 				} );
 				loader.load( 'models/house2.fbx', function ( object ) {
 					houses.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+				loader.load( 'models/house3.fbx', function ( object ) {
+					houses.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+				loader.load( 'models/house4.fbx', function ( object ) {
+					houses.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+
+				loader.load( 'models/roof.fbx', function ( object ) {
+					roofs.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+				loader.load( 'models/roof2.fbx', function ( object ) {
+					roofs.push(object);
 				}, undefined, function ( e ) {
 					console.error( e );
 				} );
@@ -200,6 +240,18 @@
 				} );
 				loader.load( 'models/ac2.fbx', function ( object ) {
 					acs.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+
+
+				loader.load( 'models/inside1.fbx', function ( object ) {
+					insides.push(object);
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+				loader.load( 'models/inside2.fbx', function ( object ) {
+					insides.push(object);
 				}, undefined, function ( e ) {
 					console.error( e );
 				} );
@@ -225,13 +277,6 @@
 					console.error( e );
 				} );
 
-				// loader.load( 'models/ground.fbx', function ( object ) {
-				// 	object.castShadow = true;
-				// 	object.receiveShadow = true;
-				// 	scene.add( object );
-				// }, undefined, function ( e ) {
-				// 	console.error( e );
-				// } );
 				loader.load( 'models/street.fbx', function ( object ) {
 					street = object;
 					object.castShadow = true;
@@ -292,7 +337,7 @@
 
 			// generate a map
 			function generateAlley() {
-				var b,h,s,sv,sh,a,l,rot;
+				var b,h,s,sv,sh,a,l,ins,rf,rot;
 				var board;
 				for(var i = 0; i < mapWidth; i++){
 					for(var j = 0; j < mapHeight; j++){
@@ -315,7 +360,7 @@
 							sv.translateZ(pos[1]);
 							scene.add( sv );
 
-							var r0 = randInt(0,3);
+							var r0 = randInt(0,5);
 							if(r0 == 0){
 								board = blackboard.clone();
 								board.castShadow = true;
@@ -336,6 +381,7 @@
 						else
 						{
 							if(checkneighbor(i,j)){
+								//-------------------shops
 								var r = randInt(0,buildings.length-1);	// randomly choose a building
 								b = buildings[r].clone();
 								b.castShadow = true;
@@ -346,14 +392,24 @@
 								rot = rotation[checkOrientation(i,j)];
 								b.rotation.y = rot;
 								scene.add( b );
+								//---------------interior
+								r = randInt(0,insides.length-1);	// randomly choose a building
+								ins = insides[r].clone();
+								ins.castShadow = true;
+								ins.receiveShadow = true;
+								ins.translateX(pos[0]);
+								ins.translateZ(pos[1]);
+								ins.rotation.y = rot;
+								scene.add( ins );
 
-								var newLight = new THREE.PointLight( 0xFFFFAA, 1, 100 );
-								newLight.position.set( pos[0], 20, pos[1] );
-								scene.add( newLight );
-
-								// var sphereSize = 1;
-								// var pointLightHelper = new THREE.PointLightHelper( newLight, sphereSize );
-								// scene.add( pointLightHelper );
+								//----------------add lights
+								// var newLight = new THREE.PointLight( 0xffffff, 10, 30 );
+								// newLight.position.set( pos[0], 20, pos[1] );
+								// newLight.castShadow = true;
+								// newLight.shadow.bias = - 0.005;
+								// newLight.shadow.camera.near = 1;
+								// newLight.shadow.camera.far = 60;
+								// scene.add( newLight );
 
 								// add the house aboveshop
 								var r2 = randInt(0,houses.length-1);
@@ -364,9 +420,22 @@
 								h.translateZ(pos[1]);
 								h.rotation.y = rot;
 								scene.add( h );
-
+								//add roof
+								var r0 = randInt(0,3);
+								if(r0 == 0){
+									var rr = randInt(0,roofs.length-1);
+									rf = roofs[rr].clone();
+									rf.castShadow = true;
+									rf.receiveShadow = true;
+									rf.translateX(pos[0]);
+									rf.translateZ(pos[1]);
+									rf.translateY(randInt(0,5));
+									rf.rotation.y = rot;
+									scene.add( rf );
+								}
+								
 								// add ac
-								var r0 = randInt(0,1);
+								r0 = randInt(0,1);
 								if(r0 == 0){
 									var r3 = randInt(0,acs.length-1);
 									a = acs[r3].clone();
@@ -374,7 +443,7 @@
 									a.receiveShadow = true;
 									a.translateX(pos[0]);
 									a.translateZ(pos[1]);
-									a.translateY(randInt(-2,10));
+									a.translateY(randInt(-2,5));
 									a.rotation.y = rot;
 									scene.add( a );
 								}
@@ -399,6 +468,12 @@
 						
 					}
 				}
+				scene.traverse( function( child ) { 
+					if ( child.isMesh ) {
+						child.castShadow = true;
+						child.receiveShadow = true;
+					}
+				} );
 			}
 			// return true can place a house(8 grid around is all house then false)
 			function checkneighbor(row,col){
@@ -431,6 +506,7 @@
 				}
 				return false;
 			}
+			
 			function checkOrientation(row,col){
 				if(col < 1){
 					return 2;
@@ -456,58 +532,14 @@
 				return 0;
 			}
 
-			function playerControls () {
-
-				// Are the controls enabled? (Does the browser have pointer lock?)
-				if ( controls.controlsEnabled ) {
-
-					// Save the current time
-					var time = performance.now();
-					// Create a delta value based on current time
-					var delta = ( time - prevTime ) / 1000;
-
-					// Set the velocity.x and velocity.z using the calculated time delta
-					velocity.x -= velocity.x * 10.0 * delta;
-					velocity.z -= velocity.z * 10.0 * delta;
-
-					// As velocity.y is our "gravity," calculate delta
-					velocity.y -= 9.8 * 100.0 * delta; // 100.0 = mass
-
-					if ( controls.moveForward ) {
-						velocity.z -= 400.0 * delta;
-					}
-
-					if ( controls.moveBackward ) {
-						velocity.z += 400.0 * delta;
-					}
-
-					if ( controls.moveLeft ) {
-						velocity.x -= 400.0 * delta;
-					}
-
-					if ( controls.moveRight ) {
-						velocity.x += 400.0 * delta;
-					}
-
-					// Update the position using the changed delta
-					controls.getObject().translateX( velocity.x * delta );
-					controls.getObject().translateY( velocity.y * delta );
-					controls.getObject().translateZ( velocity.z * delta );
-
-					// Prevent the camera/player from falling out of the 'world'
-					if ( controls.getObject().position.y < 10 ) {
-
-						velocity.y = 0;
-						controls.getObject().position.y = 10;
-
-					}
-
-					// Save the time for future delta calculations
-					prevTime = time;
-
-				}
+			function onWindowResize() {
+				var width = window.innerWidth;
+				var height = window.innerHeight;
+				camera.aspect = width / height;
+				camera.updateProjectionMatrix();
+				renderer.setSize( width, height );
+				composer.setSize( width, height );
 			}
-
 			init();
 			animate();
 
